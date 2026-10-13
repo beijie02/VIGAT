@@ -1,21 +1,21 @@
 Package: VIGAT
 Type: Package
-Title: Vision-Guided Selection of Marker Gene Windows in Single-Cell ATAC Data
+Title: VLM-Guided Gene Activity Quantification from Single-Cell ATAC-Seq
 Version: 0.1.0
 Authors@R:
-    person("Beijie (Paige)", "Ji", email = "beijie0210@gmail.com",
+    person("Beijie(Paige)", "Ji", email = "beijie0210@gmail.com",
            role = c("aut", "cre"))
-Description: Renders transcription start site centered single-cell ATAC
-    coverage plots for marker genes, uses a vision-capable large language
-    model to select one compact genomic window per gene, and counts fragments
-    in those windows to build a gene-by-cell ATAC count matrix.
+Description: Quantifies gene activity from single-cell ATAC-seq data.
+    Renders transcription start site centered coverage plots for marker
+    genes, uses a vision-language model to select one compact genomic window
+    per gene, and counts fragments in those windows to build a gene-by-cell
+    ATAC count matrix.
 License: MIT + file LICENSE
 URL: https://github.com/beijie02/VIGAT
 BugReports: https://github.com/beijie02/VIGAT/issues
 Encoding: UTF-8
 Depends:
     R (>= 4.2.0),
-    Seurat,
     Signac
 Imports:
     SeuratObject,
@@ -30,11 +30,11 @@ Imports:
     scales,
     httr2,
     stringr,
-    jsonlite,
     base64enc
 Suggests:
+    Seurat,
     knitr,
     rmarkdown
 VignetteBuilder: knitr
 biocViews:
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3

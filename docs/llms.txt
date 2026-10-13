@@ -1,0 +1,137 @@
+# VIGAT
+
+**VIGAT: VLM-guided gene activity quantification from single-cell
+ATAC-seq**
+
+VIGAT uses a vision-language model (VLM) to read TSS-centered
+single-cell ATAC coverage plots and select, for each marker gene, one
+compact genomic window that best captures its cluster-specific chromatin
+accessibility. VIGAT then counts fragments in those windows to quantify
+gene activity, returning a gene-by-cell ATAC count matrix.
+
+![](reference/figures/vigat_example.png)  
+*The window VIGAT selects (blue) on a TSS-centered ATAC coverage plot of
+a human islet sample.*
+
+## Installation
+
+VIGAT needs R (\>= 4.2). Install the Bioconductor and CRAN dependencies
+first, then install VIGAT from GitHub:
+
+``` r
+install.packages(c("Seurat", "Signac", "remotes"))
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install(c("GenomicRanges", "GenomeInfoDb", "IRanges", "S4Vectors", "BiocGenerics"))
+
+remotes::install_github("beijie02/VIGAT")
+```
+
+## Quick start
+
+``` r
+library(VIGAT)
+
+# obj: a processed Signac Seurat object with an "ATAC" assay,
+#      gene annotation and fragment files.
+res <- VIGAT(
+  obj         = obj,
+  genes       = c("INS", "GCG", "SST", "PRSS1", "PECAM1", "LUM"),
+  tissue      = "Islet",
+  cluster_col = "ATAC_cluster"   # metadata column with ATAC clusters; NULL uses Idents(obj)
+)
+
+res$vigat_windows        # GRanges: one selected window per gene
+res$count_matrix         # gene x cell ATAC counts in those windows
+
+# Add the counts as a new assay for downstream analysis
+obj[["VIGAT"]] <- CreateAssayObject(counts = res$count_matrix)
+```
+
+VIGAT reads your OpenAI key from the `OPENAI_API_KEY` environment
+variable. Add `OPENAI_API_KEY=your_key` to `~/.Renviron` once, and never
+put the key in scripts or commit it to GitHub.
+
+## Output
+
+[`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md) writes
+nothing to disk. It returns a list:
+
+| Element | Description |
+|----|----|
+| `vigat_windows` | `GRanges` with the selected window for each gene |
+| `vigat_window_df` | The same windows as a data frame (gene, chr, start, end, width) |
+| `count_matrix` | Sparse gene-by-cell fragment counts in the windows |
+| `diagnostics` | Raw model response, genes found and genes skipped |
+| `intermediates` | With `return_intermediates = TRUE`: TSS info, overlapping peaks, the coverage plots sent to the model, the prompt, the full API response and run information |
+| `highlighted_plots` | With `return_highlighted_plots = TRUE`: one ggplot per gene with the selected window highlighted |
+
+Save anything you need with the usual R functions, for example:
+
+``` r
+res <- VIGAT(obj, genes = marker_genes, tissue = "Islet",
+             return_highlighted_plots = TRUE)
+write.csv(res$vigat_window_df, "vigat_windows.csv", row.names = FALSE)
+for (g in names(res$highlighted_plots)) {
+  ggplot2::ggsave(paste0(g, "_vigat.png"), res$highlighted_plots[[g]],
+                  width = 7, height = 7, dpi = 150)
+}
+```
+
+## Vignette
+
+A full walkthrough on an example human islet dataset: [Getting started
+with VIGAT](https://beijie02.github.io/VIGAT/articles/VIGAT.html)
+
+## Main arguments
+
+| Argument | Default | Description |
+|----|----|----|
+| `obj` |  | Signac Seurat object with an `ATAC` assay, annotation and fragments |
+| `genes` |  | Marker genes to score |
+| `tissue` |  | Tissue name passed to the model (improves accuracy) |
+| `species` | `"human"` | Species passed to the model; `NULL` to omit |
+| `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
+| `min_atac_cluster_cells` | `50` | Clusters smaller than this are dropped before plotting |
+| `openai_model` | `"gpt-5.5"` | OpenAI model used to read the plots |
+| `return_intermediates` | `FALSE` | Also return TSS info, peaks, input coverage plots, prompt and API logs |
+| `return_highlighted_plots` | `FALSE` | Also return coverage plots with the selected window highlighted |
+
+## Troubleshooting
+
+- **`OPENAI_API_KEY is not set`**: set it with
+  [`Sys.setenv()`](https://rdrr.io/r/base/Sys.setenv.html) or add
+  `OPENAI_API_KEY=...` to `~/.Renviron`.
+- **Error in the count-matrix step**: `Fragments(obj)` must point to
+  fragment files that exist on the machine running VIGAT.
+- **Gene skipped**: the gene is missing from the ATAC annotation, or its
+  chromosome is absent from the peak set. Check
+  `res$diagnostics$genes_skipped`.
+- **PDF too large**: OpenAI limits uploads to 50 MB. Use fewer genes per
+  run.
+
+## Citation
+
+## Contact
+
+Please report bugs through [GitHub
+issues](https://github.com/beijie02/VIGAT/issues).
+
+# Package index
+
+## Main function
+
+- [`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md) :
+  VLM-guided gene activity quantification for one sample
+
+## Package
+
+- [`VIGAT-package`](https://beijie02.github.io/VIGAT/reference/VIGAT-package.md)
+  : VIGAT: VLM-guided gene activity quantification from single-cell
+  ATAC-seq
+
+# Articles
+
+### All vignettes
+
+- [Getting started with
+  VIGAT](https://beijie02.github.io/VIGAT/articles/VIGAT.md):

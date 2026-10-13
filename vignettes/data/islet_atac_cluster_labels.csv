@@ -1,0 +1,9 @@
+"ATAC_cluster","n_cells","voted_cell_type","prop_voted"
+"0",5796,"Beta cell",0.973
+"1",2485,"Alpha cell",0.973
+"2",707,"Delta cell",0.87
+"3",276,"TUBA1A ductal cell",0.996
+"4",272,"Fibroblast",0.695
+"5",262,"Endothelial cell",0.744
+"6",221,"Alpha cell",0.828
+"7",74,"Acinar cell",1

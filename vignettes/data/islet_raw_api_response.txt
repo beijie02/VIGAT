@@ -1,0 +1,58 @@
+Gene; TSS direction; chr:start-end; Size; Anchor evidence; Strongest useful clusters; Brief rationale.
+
+CPA1; +; chr7:130379450-130381100; 1651 bp; called Peak chr7:130379537-130381024; clusters 7, 1, 2, 3; Promoter-side/TSS-proximal peak for the + strand gene, with clear acinar-like cluster-specific accessibility, especially cluster 7.
+
+CTRB1; +; chr16:75218250-75219250; 1001 bp; called Peak chr16:75218572-75219094; clusters 7, 5, 4; Compact window around the promoter-overlapping called peak just upstream of the + strand TSS, avoiding more distal weak signal.
+
+PRSS1; +; chr7:142748850-142749850; 1001 bp; called Peak chr7:142749214-142749495; clusters 7, 3; Sharp promoter-side accessibility overlapping the called peak near the + strand TSS.
+
+GCG; -; chr2:162152004-162153004; 1001 bp; called Peak overlapping the TSS (inside the window); clusters 1, 6; TSS-overlapping window at the - strand GCG promoter that captures the alpha-like signal in clusters 1 and 6, avoiding the strong upstream peak shared by most clusters.
+
+TTR; +; chr18:31590850-31592050; 1201 bp; called Peak chr18:31590941-31591981; clusters 1, 0, 2, 3; TSS-proximal/promoter peak with strong cluster-specific accessibility; avoids distal downstream/upstream peaks.
+
+IAPP; +; chr12:21353250-21354350; 1101 bp; called Peak chr12:21353327-21354299; clusters 0, 6, 5, 2; Promoter-side peak immediately upstream of the + strand IAPP TSS; avoids the more distal left peak likely less specific to IAPP.
+
+INS; -; chr11:2160750-2161750; 1001 bp; called Peak chr11:2160857-2161482; cluster 0; Promoter/TSS-proximal peak for the - strand INS locus, capturing the strongest useful promoter signal while avoiding distal TH-side peaks.
+
+RBP4; -; chr10:93599850-93601750; 1901 bp; called Peak chr10:93599896-93601663; clusters 0, 2, 3, 5, 6; Broad but compact TSS-proximal/promoter-overlapping signal at the RBP4 end of the locus; avoids the more distal upstream peak.
+
+SST; -; chr3:187669650-187670850; 1201 bp; called Peak chr3:187669747-187670768; clusters 2, 3, 4, 7; Promoter-side peak overlapping the - strand SST TSS region, with strong cluster-specific signal.
+
+PECAM1; -; chr17:64411750-64412750; 1001 bp; called Peak chr17:64411826-64412481; cluster 5; The canonical upstream/right-side peak is weak in the marker-like cluster, so this compact TSS-adjacent/proximal intragenic peak was selected because it gives the clearest PECAM1-specific signal.
+
+RAMP2; +; chr17:42760450-42761950; 1501 bp; called Peak chr17:42760516-42761934; cluster 5; Selected the clearest proximal RAMP2-associated accessible region overlapping a called peak; the immediate upstream promoter-side signal is weak.
+
+DCN; -; chr12:91180323-91181523; 1201 bp; coverage-only; cluster 4; No called peak overlaps the informative signal; compact intragenic window over the fibroblast-like coverage in cluster 4, avoiding the distal left-side signal shared across clusters.
+
+LUM; -; chr12:91110950-91111950; 1001 bp; called Peak chr12:91111385-91111750; clusters 4, 6, 7; Promoter/TSS-proximal peak for the - strand LUM gene, capturing the clearest local accessibility.
+
+SERPINA1; -; chr14:94390200-94391200; 1001 bp; called Peak chr14:94390440-94391068; clusters 3, 7, 2; Promoter-side peak overlapping the - strand SERPINA1 TSS region; avoids the more downstream/internal peak.
+
+SPP1; +; chr4:87974650-87975850; 1201 bp; called Peak chr4:87974783-87975774; clusters 3, 7, 0, 2, 4; TSS-proximal promoter-side peak for the + strand gene with strong, compact accessibility; avoids the more distal downstream gene-body peak.
+
+```r
+vigat_windows <- GRanges(
+  seqnames = c(
+    "chr7", "chr16", "chr7", "chr2", "chr18",
+    "chr12", "chr11", "chr10", "chr3", "chr17",
+    "chr17", "chr12", "chr12", "chr14", "chr4"
+  ),
+  ranges = IRanges(
+    start = c(
+      130379450, 75218250, 142748850, 162152004, 31590850,
+      21353250, 2160750, 93599850, 187669650, 64411750,
+      42760450, 91180323, 91110950, 94390200, 87974650
+    ),
+    end = c(
+      130381100, 75219250, 142749850, 162153004, 31592050,
+      21354350, 2161750, 93601750, 187670850, 64412750,
+      42761950, 91181523, 91111950, 94391200, 87975850
+    )
+  ),
+  gene = c(
+    "CPA1", "CTRB1", "PRSS1", "GCG", "TTR",
+    "IAPP", "INS", "RBP4", "SST", "PECAM1",
+    "RAMP2", "DCN", "LUM", "SERPINA1", "SPP1"
+  )
+)
+```

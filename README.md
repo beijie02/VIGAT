@@ -1,12 +1,14 @@
-# VIGAT
+# VIGAT <img src="man/figures/logo.png" align="right" height="139" />
 
-**VIGAT** (<!-- TODO: full name, e.g. "VIsion-Guided ATAC ..." -->) uses a vision-capable large language model to read TSS-centered single-cell ATAC coverage plots and pick, for each marker gene, one compact genomic window that best captures its cluster-specific accessibility. VIGAT then counts fragments in those windows to build a gene-by-cell ATAC count matrix.
+**VIGAT: VLM-guided gene activity quantification from single-cell ATAC-seq**
 
-<!-- TODO: add a figure at man/figures/vigat_example.png, then uncomment:
+VIGAT uses a vision-language model (VLM) to read TSS-centered single-cell ATAC coverage plots and select, for each marker gene, one compact genomic window that best captures its cluster-specific chromatin accessibility. VIGAT then counts fragments in those windows to quantify gene activity, returning a gene-by-cell ATAC count matrix.
+
 <p align="center">
-  <img src="man/figures/vigat_example.png" width="800">
+  <img src="man/figures/vigat_example.png" width="600">
+  <br>
+  <em>The window VIGAT selects (blue) on a TSS-centered ATAC coverage plot of a human islet sample.</em>
 </p>
--->
 
 ## Installation
 
@@ -20,54 +22,57 @@ BiocManager::install(c("GenomicRanges", "GenomeInfoDb", "IRanges", "S4Vectors", 
 remotes::install_github("beijie02/VIGAT")
 ```
 
-## Quick start with a Signac object
+## Quick start
 
 ```r
-# IMPORTANT: never share your API key or commit it to GitHub
-Sys.setenv(OPENAI_API_KEY = "your_openai_API_key")
-
 library(VIGAT)
-library(Seurat)
-library(Signac)
 
 # obj: a processed Signac Seurat object with an "ATAC" assay,
-#      gene annotation, and fragment files.
-# Set the active identity to your ATAC clustering.
-Idents(obj) <- "ATAC_snn_res.0.8"
-
-res <- run_vigat(
-  obj     = obj,
-  genes   = c("INS", "GCG", "SST", "PRSS1", "KRT19"),
-  tissue  = "Islet",
-  species = "human",
-  outdir  = "VIGAT_output"
+#      gene annotation and fragment files.
+res <- VIGAT(
+  obj         = obj,
+  genes       = c("INS", "GCG", "SST", "PRSS1", "PECAM1", "LUM"),
+  tissue      = "Islet",
+  cluster_col = "ATAC_cluster"   # metadata column with ATAC clusters; NULL uses Idents(obj)
 )
 
-# Selected windows (one per gene)
-res$vigat_window_df
+res$vigat_windows        # GRanges: one selected window per gene
+res$count_matrix         # gene x cell ATAC counts in those windows
 
-# Gene-by-cell raw ATAC counts in the selected windows
-res$count_matrix[, 1:5]
-
-# Add as a new assay for downstream analysis
+# Add the counts as a new assay for downstream analysis
 obj[["VIGAT"]] <- CreateAssayObject(counts = res$count_matrix)
 ```
 
+VIGAT reads your OpenAI key from the `OPENAI_API_KEY` environment variable. Add `OPENAI_API_KEY=your_key` to `~/.Renviron` once, and never put the key in scripts or commit it to GitHub.
+
 ## Output
 
-`run_vigat()` returns a list and writes these files to `outdir`:
+`VIGAT()` writes nothing to disk. It returns a list:
 
-| Return value | File | Description |
-|---|---|---|
-| `vigat_windows` | `vigat_windows.rds` | `GRanges` of the selected window for each gene |
-| `vigat_window_df` | `vigat_windows.csv` | The same windows as a data frame (gene, chr, start, end, width) |
-| `count_matrix` | `vigat_count_matrix.rds` | Sparse gene-by-cell fragment counts in the windows |
-| `diagnostics` | `raw_api_response.txt` | Raw model response, genes found and genes skipped |
-| | `coverageplot_vigat_window_highlighted/` | Coverage plots with the selected window highlighted |
+| Element | Description |
+|---|---|
+| `vigat_windows` | `GRanges` with the selected window for each gene |
+| `vigat_window_df` | The same windows as a data frame (gene, chr, start, end, width) |
+| `count_matrix` | Sparse gene-by-cell fragment counts in the windows |
+| `diagnostics` | Raw model response, genes found and genes skipped |
+| `intermediates` | With `return_intermediates = TRUE`: TSS info, overlapping peaks, the coverage plots sent to the model, the prompt, the full API response and run information |
+| `highlighted_plots` | With `return_highlighted_plots = TRUE`: one ggplot per gene with the selected window highlighted |
+
+Save anything you need with the usual R functions, for example:
+
+```r
+res <- VIGAT(obj, genes = marker_genes, tissue = "Islet",
+             return_highlighted_plots = TRUE)
+write.csv(res$vigat_window_df, "vigat_windows.csv", row.names = FALSE)
+for (g in names(res$highlighted_plots)) {
+  ggplot2::ggsave(paste0(g, "_vigat.png"), res$highlighted_plots[[g]],
+                  width = 7, height = 7, dpi = 150)
+}
+```
 
 ## Vignette
 
-A full walkthrough on an example islet dataset: [VIGAT vignette](<!-- TODO: link to the rendered vignette HTML -->)
+A full walkthrough on an example human islet dataset: [Getting started with VIGAT](https://beijie02.github.io/VIGAT/articles/VIGAT.html)
 
 ## Main arguments
 
@@ -80,9 +85,8 @@ A full walkthrough on an example islet dataset: [VIGAT vignette](<!-- TODO: link
 | `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
 | `min_atac_cluster_cells` | `50` | Clusters smaller than this are dropped before plotting |
 | `openai_model` | `"gpt-5.5"` | OpenAI model used to read the plots |
-| `outdir` | `"VIGAT_output"` | Output directory |
-| `save_intermediates` | `TRUE` | Save TSS info, peaks, prompt, coverage PDFs and API logs |
-| `save_highlighted_plots` | `TRUE` | Save coverage plots with the selected window highlighted |
+| `return_intermediates` | `FALSE` | Also return TSS info, peaks, input coverage plots, prompt and API logs |
+| `return_highlighted_plots` | `FALSE` | Also return coverage plots with the selected window highlighted |
 
 ## Troubleshooting
 

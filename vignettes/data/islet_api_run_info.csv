@@ -1,0 +1,2 @@
+"species","tissue","model","n_input_genes","n_genes_found","n_genes_skipped","n_pdf_files","total_pdf_size_mb","http_status","response_id","elapsed_seconds","input_tokens","output_tokens","total_tokens"
+"human","Islet","gpt-5.5",15,15,0,4,0.769362449645996,200,"resp_0aed4652efee46c7006a535508d2e4819db5e046f8b1a3ef0f",124.465751409531,31492,6590,38082

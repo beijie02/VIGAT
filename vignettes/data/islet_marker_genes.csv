@@ -1,0 +1,16 @@
+sample_id,tissue,target_celltype,gene,n_cells,matched_Cell.Type,match_method,matched
+GSM7618328_GSM7618327,Islet,Acinar cell,CPA1,84,Acinar cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Acinar cell,CTRB1,84,Acinar cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Acinar cell,PRSS1,84,Acinar cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Alpha cell,GCG,2660,Alpha cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Alpha cell,TTR,2660,Alpha cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Beta cell,IAPP,5759,Beta cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Beta cell,INS,5759,Beta cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Delta cell,RBP4,683,Delta cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Delta cell,SST,683,Delta cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Endothelial cell,PECAM1,200,Endothelial cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Endothelial cell,RAMP2,200,Endothelial cell,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Fibroblast,DCN,197,Fibroblast,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,Fibroblast,LUM,197,Fibroblast,1_exact_celltype,TRUE
+GSM7618328_GSM7618327,Islet,TUBA1A ductal cell,SERPINA1,286,TUBA1A+ ductal cell,2_normalized_or_alias,TRUE
+GSM7618328_GSM7618327,Islet,TUBA1A ductal cell,SPP1,286,TUBA1A+ ductal cell,2_normalized_or_alias,TRUE

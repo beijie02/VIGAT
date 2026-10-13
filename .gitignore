@@ -5,6 +5,5 @@
 .Renviron
 .DS_Store
 inst/doc
-docs
 VIGAT_output/
 *.rds

@@ -1,92 +1,461 @@
 ---
-title: "Selecting marker-gene ATAC windows with VIGAT"
+title: "Getting started with VIGAT"
 output:
   html_document:
     toc: true
     toc_float: true
+    toc_depth: 2
 vignette: >
-  %\VignetteIndexEntry{VIGAT}
+  %\VignetteIndexEntry{Getting started with VIGAT}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include = FALSE}
-# VIGAT calls the OpenAI API and needs fragment files,
-# so code chunks are shown but not run when the vignette is built.
-# Results below are loaded from a precomputed run.
-knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
+# VIGAT calls the OpenAI API and reads fragment files, so the analysis code
+# below is shown but not run when the vignette is built. Tables and figures
+# come from a precomputed run on the same data (files in data/ and figures/).
+knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE,
+                      comment = "#>")
 ```
 
 ## Overview
 
-<!-- TODO: 2–3 sentences on what VIGAT does and why a window is better than the whole gene body / promoter. -->
+Gene activity scores for single-cell ATAC-seq are usually computed by counting
+fragments over a fixed region for every gene, such as the gene body plus 2 kb
+upstream. A fixed rule can miss where the informative accessibility actually is:
+the cell-type-specific signal may sit in a short promoter peak, be offset from
+the annotated TSS, or be mixed with signal from a neighbouring gene.
 
-## Setup
+**VIGAT** (VLM-guided gene activity quantification) chooses the region gene by
+gene, the way an analyst would by eye. For each marker gene it
+
+1. draws a coverage plot of the ±5 kb around the TSS, with one track per ATAC
+   cluster, the gene model and the called peaks;
+2. sends the plots to a vision-language model (VLM) with instructions to pick
+   one compact window that captures the clearest cluster-specific promoter signal;
+3. counts fragments in the selected windows to build a gene-by-cell matrix.
+
+All of this happens in a single call to `VIGAT()`.
+
+This vignette runs VIGAT on a human pancreatic islet sample with 15 marker genes
+for 7 cell types.
+
+## Installation
+
+```{r}
+install.packages(c("Seurat", "Signac", "remotes"))
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install(c("GenomicRanges", "GenomeInfoDb", "IRanges",
+                       "S4Vectors", "BiocGenerics"))
+remotes::install_github("beijie02/VIGAT")
+```
+
+VIGAT reads your OpenAI API key from the `OPENAI_API_KEY` environment variable.
+Add it once to `~/.Renviron`:
+
+```
+OPENAI_API_KEY=your_openai_api_key
+```
+
+then restart R. Do not put the key in scripts or commit it to GitHub.
 
 ```{r}
 library(VIGAT)
 library(Seurat)
 library(Signac)
-
-Sys.setenv(OPENAI_API_KEY = "your_openai_API_key")
 ```
 
 ## Example data
 
-<!-- TODO: describe the islet sample (GSM7618328_GSM7618327) and where to download it. -->
+The example is the human islet sample GSM7618328_GSM7618327 from
+CompassDB. The object has been quality-controlled and clustered on the ATAC data, and the cluster labels are stored in the metadata column `ATAC_cluster`.
+
+Three files are needed: the object `islet_example_atac.rds` (about 3.9 GB), the
+fragment file `islet_fragments.tsv.gz` (about 3 GB) and its index
+`islet_fragments.tsv.gz.tbi`. Download them into the same folder:
 
 ```{r}
-obj <- readRDS("islet_example.rds")
-DefaultAssay(obj) <- "ATAC"
-Idents(obj) <- "ATAC_snn_res.0.8"   # TODO: your ATAC clustering column
-table(Idents(obj))
+options(timeout = 3600)   # large files: allow up to an hour per download
+base <- "https://duke.box.com/shared/static"
+
+download.file(file.path(base, "g31hskzlm8865ojydlyjtkurwz3ao4gc.rds"),
+              "islet_example_atac.rds", mode = "wb")
+download.file(file.path(base, "637jcsxkkw4dxn8oka7k6kig6uo5d905.gz"),
+              "islet_fragments.tsv.gz", mode = "wb")
+download.file(file.path(base, "7mzirxtynqummqoflwpquq2n9r28cda7.tbi"),
+              "islet_fragments.tsv.gz.tbi", mode = "wb")
 ```
 
-## Choose marker genes
+A Signac object stores the location of its fragment file, so point the object
+to the downloaded file:
 
 ```{r}
-marker_genes <- c("INS", "GCG", "SST", "PPY", "PRSS1", "KRT19")  # TODO
+obj <- readRDS("islet_example_atac.rds")
+
+frags <- Fragments(obj)
+frags[[1]] <- UpdatePath(frags[[1]], new.path = "islet_fragments.tsv.gz")
+Fragments(obj) <- NULL
+Fragments(obj) <- frags
+
+table(obj$ATAC_cluster)
+```
+
+The object has 10,093 cells in 8 ATAC clusters. To make the results easier to
+read, the table below labels each cluster with the RNA cell type that most of
+its cells belong to. VIGAT does not use these labels; the model only sees the
+cluster numbers.
+
+```{r clusters, eval = TRUE, echo = FALSE}
+cl <- read.csv("data/islet_atac_cluster_labels.csv")
+knitr::kable(cl[, c("ATAC_cluster", "n_cells", "voted_cell_type")],
+             col.names = c("ATAC cluster", "Cells", "Majority RNA cell type"),
+             align = "lrl", format.args = list(big.mark = ","))
+```
+
+## Marker genes
+
+For each cell type present in the sample we use two or three marker genes,
+taken from the cell type markers in
+[DISCO](https://www.immunesinglecell.com/cell_type).
+
+```{r markers, eval = TRUE, echo = FALSE}
+mk <- read.csv("data/islet_marker_genes.csv")
+mk_tab <- aggregate(gene ~ target_celltype, data = mk, FUN = paste, collapse = ", ")
+knitr::kable(mk_tab, col.names = c("Cell type", "Marker genes"))
+```
+
+```{r}
+marker_genes <- c("CPA1", "CTRB1", "PRSS1",      # acinar
+                  "GCG", "TTR",                 # alpha
+                  "IAPP", "INS",                # beta
+                  "RBP4", "SST",                # delta
+                  "PECAM1", "RAMP2",            # endothelial
+                  "DCN", "LUM",                 # fibroblast
+                  "SERPINA1", "SPP1")           # ductal
 ```
 
 ## Run VIGAT
 
+One call does the whole analysis:
+
 ```{r}
-res <- run_vigat(
-  obj     = obj,
-  genes   = marker_genes,
-  tissue  = "Islet",
-  species = "human",
-  outdir  = "VIGAT_output/islet"
+res <- VIGAT(
+  obj         = obj,
+  genes       = marker_genes,
+  tissue      = "Islet",
+  species     = "human",
+  cluster_col = "ATAC_cluster",
+  return_highlighted_plots = TRUE
 )
 ```
 
+Inside `VIGAT()`:
+
+- Cells with no cluster label are removed, and so are clusters with fewer than
+  `min_atac_cluster_cells` cells (50 by default). Here every cluster has at
+  least 50 cells, so all 10,093 cells are kept.
+- For each gene, the TSS and strand are taken from the gene annotation of the
+  ATAC assay, and the called peaks within ±5 kb are collected.
+- The coverage plots are laid out four genes per page and uploaded to the
+  model as PDFs, together with a prompt that lists each gene, its strand and
+  the overlapping peaks. The PDFs are written to a temporary folder and
+  deleted when `VIGAT()` returns.
+- The model returns one window per gene. VIGAT parses the windows and counts
+  fragments in them with `Signac::FeatureMatrix()`.
+
+`VIGAT()` writes nothing to disk; everything comes back in `res`. The main
+outputs are `res$vigat_windows`, the selected window for each gene, and
+`res$count_matrix`, the gene-by-cell matrix of fragment counts in those windows.
+
+```{r run-info, eval = TRUE, echo = FALSE}
+ri <- read.csv("data/islet_api_run_info.csv")
+```
+
+In this run the model (`r ri$model`) used `r format(ri$total_tokens, big.mark = ",")`
+tokens and took about `r round(ri$elapsed_seconds / 60, 1)` minutes for
+`r ri$n_genes_found` genes, sent as `r ri$n_pdf_files` PDF pages.
+
 ## Selected windows
 
+`res$vigat_windows` is a `GRanges` object with one window per gene, and
+`res$vigat_window_df` holds the same information as a data frame. The model also
+explains each choice; its reply is kept in `res$diagnostics$raw_response`. The
+table below combines the two.
+
+<div style="overflow-x: auto; font-size: 0.85em;">
+
+```{r windows, eval = TRUE, echo = FALSE}
+win <- read.csv("data/islet_vigat_windows.csv")
+raw <- readLines("data/islet_raw_api_response.txt")
+rows <- grep("^[A-Za-z0-9]+; [+-]; chr", raw, value = TRUE)
+parts <- strsplit(rows, "; ", fixed = TRUE)
+expl <- data.frame(
+  gene      = vapply(parts, `[`, "", 1),
+  strand    = vapply(parts, `[`, "", 2),
+  evidence  = vapply(parts, `[`, "", 5),
+  clusters  = vapply(parts, `[`, "", 6),
+  rationale = vapply(parts, function(x) paste(x[-(1:6)], collapse = "; "), "")
+)
+tab <- merge(win, expl, by = "gene", sort = FALSE)
+tab <- tab[match(win$gene, tab$gene), ]
+tab$strand <- ifelse(tab$strand == "+", "&#43;", "&#8722;")  # HTML entities, so "+"/"-" are not read as list bullets
+tab$window <- sprintf("%s:%s-%s", tab$chr,
+                      format(tab$start, big.mark = ",", trim = TRUE),
+                      format(tab$end, big.mark = ",", trim = TRUE))
+knitr::kable(
+  tab[, c("gene", "strand", "window", "width", "evidence", "clusters", "rationale")],
+  col.names = c("Gene", "Strand", "Window", "Width (bp)", "Anchor evidence",
+                "Strongest clusters", "Model rationale"),
+  row.names = FALSE,
+  format = "html",
+  escape = FALSE,
+  table.attr = 'class="table" style="min-width: 1100px;"'
+)
+```
+
+</div>
+
+All 15 genes received a window between 1.0 and 1.9 kb. Fourteen are anchored on
+a called peak; for DCN no peak overlaps the informative signal, so the window
+follows the coverage alone.
+
+The strongest clusters named by the model agree with the cell-type labels above
+without the model having seen them: acinar genes (CPA1, CTRB1, PRSS1) point to
+cluster 7, INS to cluster 0 (beta), PECAM1 and RAMP2 to cluster 5
+(endothelial), and DCN to cluster 4 (fibroblast).
+
+## Coverage plots for every gene {.tabset .tabset-pills}
+
+Click a gene to see the plot the model received (top) and the window it chose (bottom).
+To get these plots from your own run, set `return_highlighted_plots = TRUE`;
+they are returned as `res$highlighted_plots`, one ggplot per gene.
+
+### CPA1
+
+*Acinar cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_CPA1_before.png){width=100%}](figures/islet_CPA1_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_CPA1_vigat.png){width=100%}](figures/islet_CPA1_vigat.png)
+
+### CTRB1
+
+*Acinar cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_CTRB1_before.png){width=100%}](figures/islet_CTRB1_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_CTRB1_vigat.png){width=100%}](figures/islet_CTRB1_vigat.png)
+
+### PRSS1
+
+*Acinar cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_PRSS1_before.png){width=100%}](figures/islet_PRSS1_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_PRSS1_vigat.png){width=100%}](figures/islet_PRSS1_vigat.png)
+
+### GCG
+
+*Alpha cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_GCG_before.png){width=100%}](figures/islet_GCG_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_GCG_vigat.png){width=100%}](figures/islet_GCG_vigat.png)
+
+### TTR
+
+*Alpha cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_TTR_before.png){width=100%}](figures/islet_TTR_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_TTR_vigat.png){width=100%}](figures/islet_TTR_vigat.png)
+
+### IAPP
+
+*Beta cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_IAPP_before.png){width=100%}](figures/islet_IAPP_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_IAPP_vigat.png){width=100%}](figures/islet_IAPP_vigat.png)
+
+### INS
+
+*Beta cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_INS_before.png){width=100%}](figures/islet_INS_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_INS_vigat.png){width=100%}](figures/islet_INS_vigat.png)
+
+### RBP4
+
+*Delta cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_RBP4_before.png){width=100%}](figures/islet_RBP4_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_RBP4_vigat.png){width=100%}](figures/islet_RBP4_vigat.png)
+
+### SST
+
+*Delta cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_SST_before.png){width=100%}](figures/islet_SST_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_SST_vigat.png){width=100%}](figures/islet_SST_vigat.png)
+
+### PECAM1
+
+*Endothelial cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_PECAM1_before.png){width=100%}](figures/islet_PECAM1_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_PECAM1_vigat.png){width=100%}](figures/islet_PECAM1_vigat.png)
+
+### RAMP2
+
+*Endothelial cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_RAMP2_before.png){width=100%}](figures/islet_RAMP2_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_RAMP2_vigat.png){width=100%}](figures/islet_RAMP2_vigat.png)
+
+### DCN
+
+*Fibroblast marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_DCN_before.png){width=100%}](figures/islet_DCN_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_DCN_vigat.png){width=100%}](figures/islet_DCN_vigat.png)
+
+### LUM
+
+*Fibroblast marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_LUM_before.png){width=100%}](figures/islet_LUM_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_LUM_vigat.png){width=100%}](figures/islet_LUM_vigat.png)
+
+### SERPINA1
+
+*TUBA1A ductal cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_SERPINA1_before.png){width=100%}](figures/islet_SERPINA1_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_SERPINA1_vigat.png){width=100%}](figures/islet_SERPINA1_vigat.png)
+
+### SPP1
+
+*TUBA1A ductal cell marker.* Click a plot to open it at full size.
+
+**Input to VIGAT** — the TSS ±5 kb coverage plot sent to the model
+
+[![](figures/islet_SPP1_before.png){width=100%}](figures/islet_SPP1_before.png)
+
+**VIGAT window** — the same plot with the selected window in blue
+
+[![](figures/islet_SPP1_vigat.png){width=100%}](figures/islet_SPP1_vigat.png)
+
+
+## Save the results
+
+Because `VIGAT()` does not write files, save what you need yourself:
+
 ```{r}
-res$vigat_window_df
+saveRDS(res, "vigat_islet_result.rds")
+write.csv(res$vigat_window_df, "vigat_windows.csv", row.names = FALSE)
+
+for (g in names(res$highlighted_plots)) {
+  ggplot2::ggsave(paste0(g, "_vigat.png"), res$highlighted_plots[[g]],
+                  width = 11, height = 11, dpi = 150)
+}
 ```
 
-<!-- Paste or load the precomputed table here, e.g.
-```{r, eval = TRUE}
-read.csv(system.file("extdata", "islet_vigat_windows.csv", package = "VIGAT"))
-```
--->
+Model replies can differ slightly between runs, so keep the saved result
+(including `res$vigat_windows`) for the analysis you report.
 
-## Inspect the highlighted coverage plots
+## Inspect intermediate results
 
-<!-- Export one page of coverage_vigat_window_page1.pdf as PNG and include it: -->
-```{r, eval = TRUE, echo = FALSE, out.width = "100%"}
-# knitr::include_graphics("figures/islet_INS_vigat_window.png")
-```
-
-## Use the count matrix
+Set `return_intermediates = TRUE` to also get the inputs VIGAT built for the
+model:
 
 ```{r}
-obj[["VIGAT"]] <- CreateAssayObject(counts = res$count_matrix)
-DefaultAssay(obj) <- "VIGAT"
-obj <- NormalizeData(obj)
-FeaturePlot(obj, features = marker_genes, reduction = "umap")
+res <- VIGAT(obj, genes = marker_genes, tissue = "Islet",
+             cluster_col = "ATAC_cluster", return_intermediates = TRUE)
+
+res$intermediates$tss_info           # TSS, strand and plotted region per gene
+res$intermediates$overlapping_peaks  # called peaks inside each region
+res$intermediates$coverage_plots     # the plots sent to the model
+cat(res$intermediates$prompt)        # the full prompt
+res$intermediates$api_run_info       # model, tokens, time
 ```
+
+## Options
+
+| Argument | Default | What it does |
+|---|---|---|
+| `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
+| `tissue` | (required) | Tissue name given to the model as context |
+| `species` | `"human"` | Species given to the model; `NULL` omits it |
+| `min_atac_cluster_cells` | `50` | Clusters with fewer cells are removed before plotting |
+| `openai_model` | `"gpt-5.5"` | OpenAI model that reads the plots |
+| `return_intermediates` | `FALSE` | Also return TSS info, peaks, input plots, prompt and API logs |
+| `return_highlighted_plots` | `FALSE` | Also return one highlighted coverage plot per gene |
 
 ## Session info
 

@@ -1,0 +1,9 @@
+pandoc: '3.4'
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  VIGAT: VIGAT.html
+last_built: 2026-10-13T18:25Z
+urls:
+  reference: https://beijie02.github.io/VIGAT/reference
+  article: https://beijie02.github.io/VIGAT/articles

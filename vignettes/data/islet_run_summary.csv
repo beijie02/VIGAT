@@ -1,0 +1,2 @@
+row_index,sample_id,tissue,ATAC_cluster_col,celltype_col,n_ATAC_voted_celltypes,ATAC_voted_celltypes,n_marker_genes_after_ATAC_maxvote,n_custom_ranges,outdir
+77,GSM7618328_GSM7618327,Islet,ATAC_clusters_q0_res03,annot,7,Acinar cell;Alpha cell;Beta cell;Delta cell;Endothelial cell;Fibroblast;TUBA1A ductal cell,15,15,/hpc/group/jilab/beijie/QC/software_custom_range_API_ATACvoted_markers_all_samples/Islet/GSM7618328_GSM7618327

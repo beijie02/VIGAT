@@ -1,9 +1,9 @@
-#' VIGAT: vision-guided selection of marker-gene ATAC windows
+#' VIGAT: VLM-guided gene activity quantification from single-cell ATAC-seq
 #'
 #' VIGAT renders TSS-centered single-cell ATAC coverage plots for marker
 #' genes, asks a vision-capable large language model to select one compact
 #' genomic window per gene, and counts fragments in those windows to build a
-#' gene-by-cell ATAC count matrix. The main function is \code{\link{run_vigat}}.
+#' gene-by-cell ATAC count matrix. The main function is \code{\link{VIGAT}}.
 #'
 #' @keywords internal
 #' @import ggplot2
@@ -14,7 +14,6 @@
 #' @importFrom IRanges findOverlaps
 #' @importFrom S4Vectors queryHits
 #' @importFrom dplyr %>%
-#' @importFrom utils write.csv
 #' @importFrom grDevices pdf dev.off
 "_PACKAGE"
 

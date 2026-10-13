@@ -1,0 +1,23 @@
+url: https://beijie02.github.io/VIGAT/
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#2F3E55"
+    navbar-bg: "#F7F3EA"
+
+navbar:
+  structure:
+    left: [intro, reference, articles]
+    right: [search, github]
+
+home:
+  title: "VIGAT: VLM-guided gene activity quantification from single-cell ATAC-seq"
+
+reference:
+- title: Main function
+  contents:
+  - VIGAT
+- title: Package
+  contents:
+  - VIGAT-package

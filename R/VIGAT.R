@@ -1,40 +1,22 @@
 # ============================================================
 # VIGAT.R
 #
-# VIGAT: selects marker-gene ATAC windows from TSS-centered
-# CoveragePlots with a vision LLM, then builds a gene-by-cell
-# count matrix. Main entry point: run_vigat()
+# VIGAT: VLM-guided gene activity quantification from single-cell ATAC-seq.
+# Main entry point: VIGAT()
 #
-# Usage (single sample):
+# Usage:
 #   library(VIGAT)
-#   obj <- readRDS("my_sample.rds")
-#   result <- run_vigat(
+#   res <- VIGAT(
 #     obj     = obj,
-#     genes   = c("CD3D", "CD79A", "PTPRC"),
-#     tissue  = "PBMC",
-#     species = "human",
-#     outdir  = "output/my_sample"
+#     genes   = c("INS", "GCG", "SST"),
+#     tissue  = "Islet",
+#     species = "human"
 #   )
+#   res$vigat_windows      # GRanges, one window per gene
+#   res$count_matrix       # gene x cell ATAC counts in those windows
 #
-# Usage (loop over multiple samples):
-#   for (i in seq_len(nrow(sample_table))) {
-#     obj <- readRDS(sample_table$obj_path[i])
-#     # optionally: Idents(obj) <- sample_table$atac_col[i]
-#     result <- run_vigat(
-#       obj     = obj,
-#       genes   = marker_genes,
-#       tissue  = sample_table$tissue[i],
-#       species = sample_table$species[i],
-#       outdir  = file.path(base_outdir, sample_table$sample_id[i])
-#     )
-#   }
-#
-# Returns a named list:
-#   $vigat_windows    GRanges with VIGAT-selected genomic windows
-#   $vigat_window_df  data.frame version of the selected windows
-#   $count_matrix     sparse gene-by-cell raw ATAC count matrix generated
-#                     from the selected windows using Signac::FeatureMatrix()
-#   $diagnostics      list containing raw API response, genes found, and genes skipped
+# VIGAT() writes nothing to disk. Intermediate results and highlighted
+# coverage plots are returned as R objects when requested.
 # ============================================================
 
 
@@ -122,6 +104,79 @@
       axis.ticks.x              = element_line(color = "black",  linewidth = 0.4),
       axis.ticks.length.x       = unit(0.28, "cm")
     )
+}
+
+
+# Coverage plot sent to the model (TSS +/- 5 kb, grouped by ATAC cluster).
+# info_row needs: region, tss, chr, strand. title = FALSE drops title/subtitle.
+.vigat_plot_coverage <- function(obj, info_row, group_by, tissue, title = TRUE) {
+  p <- CoveragePlot(
+    object     = obj,
+    region     = info_row$region[1],
+    group.by   = group_by,
+    annotation = TRUE,
+    peaks      = TRUE,
+    links      = FALSE
+  )
+  p <- .vigat_coverage_theme(p, tss = info_row$tss[1])
+  if (!title) return(p)
+  p + patchwork::plot_annotation(
+    title = sprintf(
+      "%s | TSS \u00b15 kb | %s%s | grouped by ATAC clusters",
+      info_row$gene[1], info_row$chr[1],
+      ifelse(info_row$strand[1] == "+", "\u2192", "\u2190")
+    ),
+    subtitle = sprintf(
+      "Tissue: %s | Region: %s | TSS: %s",
+      tissue, info_row$region[1], scales::comma(info_row$tss[1])
+    )
+  )
+}
+
+
+# Same coverage plot with the selected window highlighted in blue.
+# window_row needs: chr, start, end. title = FALSE drops title/subtitle.
+.vigat_plot_highlight <- function(obj, info_row, window_row, group_by, tissue,
+                                  title = TRUE) {
+  p <- CoveragePlot(
+    object     = obj,
+    region     = info_row$region[1],
+    group.by   = group_by,
+    annotation = TRUE,
+    peaks      = TRUE,
+    links      = FALSE
+  )
+
+  p <- p &
+    annotate("rect",
+             xmin = window_row$start[1], xmax = window_row$end[1],
+             ymin = -Inf,                ymax = Inf,
+             fill = "#2196F3",           alpha = 0.15) &
+    annotate("rect",
+             xmin = window_row$start[1], xmax = window_row$end[1],
+             ymin = -Inf,                ymax = Inf,
+             fill = NA, color = "#0D47A1", linewidth = 0.7)
+
+  p <- .vigat_coverage_theme(p, tss = info_row$tss[1])
+  if (!title) return(p)
+
+  p + patchwork::plot_annotation(
+    title = sprintf(
+      "%s | VIGAT window highlighted | TSS \u00b15 kb | %s%s",
+      info_row$gene[1], info_row$chr[1],
+      ifelse(info_row$strand[1] == "+", "\u2192", "\u2190")
+    ),
+    subtitle = sprintf(
+      "Tissue: %s | VIGAT window: %s:%s\u2013%s",
+      tissue,
+      window_row$chr[1], scales::comma(window_row$start[1]),
+      scales::comma(window_row$end[1])
+    ),
+    theme = theme(
+      plot.title    = element_text(size = 12, face = "bold"),
+      plot.subtitle = element_text(size = 9)
+    )
+  )
 }
 
 
@@ -319,7 +374,12 @@
 # MAIN FUNCTION
 # ============================================================
 
-#' Run VIGAT on one sample.
+#' VLM-guided gene activity quantification for one sample
+#'
+#' Draws TSS-centered ATAC coverage plots for each marker gene, asks a
+#' vision-language model to select one compact genomic window per gene, and
+#' counts fragments in those windows to build a gene-by-cell count matrix.
+#' Nothing is written to disk; everything is returned as R objects.
 #'
 #' @param obj          A processed Signac Seurat object with an ATAC assay
 #'                     and gene annotation. Set Idents(obj) to the desired
@@ -330,16 +390,15 @@
 #'                     Set to NULL to omit from prompt.
 #' @param cluster_col  Optional. Name of a meta.data column to use as the ATAC
 #'                     cluster assignment. If NULL (default), Idents(obj) is used.
-#' @param outdir       Directory where output files are written (created if absent).
-#'                     If NULL (default), outputs go to
-#'                     \code{getwd()/VIGAT_output}.
 #' @param min_atac_cluster_cells  Clusters with fewer cells than this are excluded.
 #'                     Default: 50.
-#' @param save_intermediates  Logical. Save gene TSS info, overlapping peaks,
-#'                     the generated prompt, API response files, run info CSV,
-#'                     and plain coverage PDFs. Default: TRUE.
-#' @param save_highlighted_plots  Logical. Save highlighted coverage plots with
-#'                     the VIGAT-selected window marked in blue. Default: TRUE.
+#' @param return_intermediates  Logical. If TRUE, also return the intermediate
+#'                     results: TSS info, overlapping peaks, the coverage plots
+#'                     sent to the model, the prompt, the full API response and
+#'                     run information. Default: FALSE.
+#' @param return_highlighted_plots  Logical. If TRUE, also return one coverage
+#'                     plot per gene with the selected window highlighted.
+#'                     Default: FALSE.
 #' @param openai_model  OpenAI model name. Default: "gpt-5.5".
 #' @section API key:
 #' This function reads the OpenAI API key from the \code{OPENAI_API_KEY}
@@ -352,7 +411,7 @@
 #' OPENAI_API_KEY=your_key_here
 #' }
 #'
-#' @return A named list with three core outputs and a diagnostics sublist:
+#' @return A named list:
 #'   \item{vigat_windows}{GRanges containing VIGAT-selected genomic windows.}
 #'   \item{vigat_window_df}{Data frame containing the selected genomic windows.}
 #'   \item{count_matrix}{Sparse gene-by-cell raw ATAC count matrix generated
@@ -360,23 +419,36 @@
 #'     \code{Signac::FeatureMatrix()}.}
 #'   \item{diagnostics}{List containing \code{raw_response},
 #'     \code{genes_found}, and \code{genes_skipped}.}
+#'   \item{intermediates}{Only if \code{return_intermediates = TRUE}: list with
+#'     \code{tss_info}, \code{overlapping_peaks}, \code{coverage_plots}
+#'     (named list of ggplot objects), \code{prompt}, \code{api_response}
+#'     and \code{api_run_info}.}
+#'   \item{highlighted_plots}{Only if \code{return_highlighted_plots = TRUE}:
+#'     named list of ggplot objects, one per gene.}
 #'
 #' @examples
 #' \dontrun{
 #' Sys.setenv(OPENAI_API_KEY = "your_key_here")
 #' Idents(obj) <- "ATAC_snn_res.0.8"
-#' res <- run_vigat(
+#' res <- VIGAT(
 #'   obj     = obj,
 #'   genes   = c("INS", "GCG", "SST"),
 #'   tissue  = "Islet",
-#'   species = "human",
-#'   outdir  = "VIGAT_output"
+#'   species = "human"
 #' )
 #' res$vigat_window_df
+#'
+#' # Keep the highlighted plots and save them yourself
+#' res <- VIGAT(obj, genes = c("INS", "GCG"), tissue = "Islet",
+#'              return_highlighted_plots = TRUE)
+#' for (g in names(res$highlighted_plots)) {
+#'   ggplot2::ggsave(paste0(g, "_vigat.png"), res$highlighted_plots[[g]],
+#'                   width = 7, height = 7, dpi = 150)
+#' }
 #' }
 #'
 #' @export
-run_vigat <- function(
+VIGAT <- function(
   obj,
   genes,
   tissue,
@@ -384,16 +456,11 @@ run_vigat <- function(
   cluster_col              = NULL,
   min_atac_cluster_cells   = 50,
   openai_model             = "gpt-5.5",
-  outdir = NULL,
-  save_intermediates = TRUE,
-  save_highlighted_plots = TRUE
+  return_intermediates     = FALSE,
+  return_highlighted_plots = FALSE
 ) {
 
   genes_per_page <- 4L   # fixed: max 4 plots per PDF page, 2-column grid
-
-  # ---- Resolve defaults ----
-  if (is.null(outdir))
-    outdir <- file.path(getwd(), "VIGAT_output")
 
   # ---- Read API key from environment ----
   openai_api_key <- Sys.getenv("OPENAI_API_KEY")
@@ -415,13 +482,10 @@ run_vigat <- function(
   if (nchar(trimws(tissue)) == 0)
     stop("'tissue' must be a non-empty string.")
 
-  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
-
   cat("=== VIGAT ===\n")
   cat("Tissue:  ", tissue, "\n")
   cat("Species: ", if (!is.null(species)) species else "(not specified)", "\n")
-  cat("Genes:   ", paste(genes, collapse = ", "), "\n")
-  cat("Output:  ", outdir, "\n\n")
+  cat("Genes:   ", paste(genes, collapse = ", "), "\n\n")
 
   DefaultAssay(obj) <- "ATAC"
 
@@ -588,17 +652,12 @@ genes_found <- marker_tss_df$gene
   if (length(genes_found) == 0)
     stop("No marker genes found in the annotation. Cannot proceed.")
 
-  if (save_intermediates) {
-    write.csv(marker_tss_df,   file.path(outdir, "gene_TSS_info.csv"),     row.names = FALSE)
-    write.csv(marker_peaks_df, file.path(outdir, "overlapping_peaks.csv"), row.names = FALSE)
-  }
 
 
   # ----------------------------------------------------------
   # STEP 4: Coverage plots
-  #   Always generated (needed for API upload).
-  #   Written to outdir (save_intermediates = TRUE) or a temp
-  #   subfolder deleted after the API call (FALSE).
+  #   Always generated (needed for API upload). PDFs go to a
+  #   temporary folder that is deleted when VIGAT() returns.
   # ----------------------------------------------------------
 
   cat("\n-- Generating coverage plots...\n")
@@ -616,16 +675,7 @@ genes_found <- marker_tss_df$gene
   }
 
   p <- tryCatch(
-    {
-      CoveragePlot(
-        object     = obj_filt,
-        region     = info_row$region[1],
-        group.by   = atac_col,
-        annotation = TRUE,
-        peaks      = TRUE,
-        links      = FALSE
-      )
-    },
+    .vigat_plot_coverage(obj_filt, info_row, group_by = atac_col, tissue = tissue),
     error = function(e) {
       warning(
         "Skipping ", gene_use,
@@ -639,21 +689,7 @@ genes_found <- marker_tss_df$gene
     }
   )
 
-  if (is.null(p)) return(NULL)
-
-  p <- .vigat_coverage_theme(p, tss = info_row$tss[1])
-
-  p + patchwork::plot_annotation(
-    title = sprintf(
-      "%s | TSS \u00b15 kb | %s%s | grouped by ATAC clusters",
-      gene_use, info_row$chr[1],
-      ifelse(info_row$strand[1] == "+", "\u2192", "\u2190")
-    ),
-    subtitle = sprintf(
-      "Tissue: %s | Region: %s | TSS: %s",
-      tissue, info_row$region[1], scales::comma(info_row$tss[1])
-    )
-  )
+  p
 })
 
 names(plots) <- genes_found
@@ -672,8 +708,9 @@ if (length(genes_found) == 0) {
 }
   names(plots) <- genes_found
 
-  coverage_subdir <- if (save_intermediates) outdir else file.path(outdir, ".tmp_coverage")
+  coverage_subdir <- tempfile("vigat_coverage_")
   dir.create(coverage_subdir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(coverage_subdir, recursive = TRUE), add = TRUE)
 
   coverage_files <- .vigat_save_plots_pdf(
     plots_list     = plots,
@@ -719,8 +756,6 @@ if (is.null(called_peaks_text) || length(called_peaks_text) == 0 || called_peaks
 
   prompt <- .vigat_build_prompt(species, tissue, markers_text, called_peaks_text)
 
-  if (save_intermediates)
-    writeLines(prompt, file.path(outdir, "generated_prompt.txt"))
 
 
   # ----------------------------------------------------------
@@ -782,39 +817,23 @@ if (is.null(called_peaks_text) || length(called_peaks_text) == 0 || called_peaks
 
   cat("\n=== API Response ===\n", raw_response, "\n")
 
-  # Clean up temp coverage PDFs if not saving intermediates
-  if (!save_intermediates) {
-    unlink(coverage_subdir, recursive = TRUE)
-  } else {
-    writeLines(raw_response, file.path(outdir, "raw_api_response.txt"))
-
-    jsonlite::write_json(
-      result,
-      path       = file.path(outdir, "full_api_response.json"),
-      pretty     = TRUE,
-      auto_unbox = TRUE,
-      null       = "null"
-    )
-
-    api_run_info <- data.frame(
-      species           = if (!is.null(species)) species else NA_character_,
-      tissue            = tissue,
-      model             = openai_model,
-      n_input_genes     = length(genes),
-      n_genes_found     = length(genes_found),
-      n_genes_skipped   = length(genes_skipped),
-      n_pdf_files       = length(coverage_files),
-      total_pdf_size_mb = sum(pdf_sizes_mb),
-      http_status       = status_code,
-      response_id       = result$id,
-      elapsed_seconds   = elapsed_seconds,
-      input_tokens      = result$usage$input_tokens ,
-      output_tokens     = result$usage$output_tokens,
-      total_tokens      = result$usage$total_tokens ,
-      stringsAsFactors  = FALSE
-    )
-    write.csv(api_run_info, file.path(outdir, "api_run_info.csv"), row.names = FALSE)
-  }
+  api_run_info <- data.frame(
+    species           = if (!is.null(species)) species else NA_character_,
+    tissue            = tissue,
+    model             = openai_model,
+    n_input_genes     = length(genes),
+    n_genes_found     = length(genes_found),
+    n_genes_skipped   = length(genes_skipped),
+    n_pdf_files       = length(coverage_files),
+    total_pdf_size_mb = sum(pdf_sizes_mb),
+    http_status       = status_code,
+    response_id       = result$id,
+    elapsed_seconds   = elapsed_seconds,
+    input_tokens      = result$usage$input_tokens ,
+    output_tokens     = result$usage$output_tokens,
+    total_tokens      = result$usage$total_tokens ,
+    stringsAsFactors  = FALSE
+  )
 
 # ----------------------------------------------------------
 # STEP 7: Parse VIGAT-selected windows
@@ -843,44 +862,22 @@ vigat_windows   <- vigat_quant$windows
 vigat_window_df <- vigat_quant$window_df
 vigat_counts    <- vigat_quant$counts
 
-write.csv(
-  vigat_window_df,
-  file.path(outdir, "vigat_windows.csv"),
-  row.names = FALSE,
-  quote = FALSE
-)
-
-saveRDS(
-  vigat_windows,
-  file.path(outdir, "vigat_windows.rds")
-)
-
-saveRDS(
-  vigat_counts,
-  file.path(outdir, "vigat_count_matrix.rds")
-)
-
 cat(
   "VIGAT count matrix:",
   nrow(vigat_counts), "genes x",
   ncol(vigat_counts), "cells\n"
 )
 
-cat(
-  "Saved: vigat_windows.csv, vigat_windows.rds, ",
-  "vigat_count_matrix.rds\n"
-)
 
   # ----------------------------------------------------------
   # STEP 9: Highlighted coverage plots  (optional)
   # ----------------------------------------------------------
 
-  if (save_highlighted_plots) {
+  plots_hl <- NULL
+
+  if (return_highlighted_plots) {
 
     cat("\n-- Generating highlighted coverage plots...\n")
-
-    highlight_dir <- file.path(outdir, "coverageplot_vigat_window_highlighted")
-    dir.create(highlight_dir, recursive = TRUE, showWarnings = FALSE)
 
     genes_with_window <- genes_found[genes_found %in% vigat_window_df$gene]
 
@@ -893,43 +890,8 @@ cat(
         info_row <- marker_tss_df   %>% dplyr::filter(gene == gene_use) %>% dplyr::slice(1)
         gr_row   <- vigat_window_df %>% dplyr::filter(gene == gene_use) %>% dplyr::slice(1)
 
-        p <- CoveragePlot(
-          object     = obj_filt,
-          region     = info_row$region[1],
-          group.by   = atac_col,
-          annotation = TRUE,
-          peaks      = TRUE,
-          links      = FALSE
-        )
-
-        p <- p &
-          annotate("rect",
-                   xmin = gr_row$start, xmax = gr_row$end,
-                   ymin = -Inf,         ymax = Inf,
-                   fill = "#2196F3",    alpha = 0.15) &
-          annotate("rect",
-                   xmin = gr_row$start, xmax = gr_row$end,
-                   ymin = -Inf,         ymax = Inf,
-                   fill = NA, color = "#0D47A1", linewidth = 0.7)
-
-        p <- .vigat_coverage_theme(p, tss = info_row$tss[1])
-
-        p + patchwork::plot_annotation(
-          title = sprintf(
-            "%s | VIGAT window highlighted | TSS \u00b15 kb | %s%s",
-            gene_use, info_row$chr[1],
-            ifelse(info_row$strand[1] == "+", "\u2192", "\u2190")
-          ),
-          subtitle = sprintf(
-            "Tissue: %s | VIGAT window: %s:%s\u2013%s",
-            tissue,
-            gr_row$chr, scales::comma(gr_row$start), scales::comma(gr_row$end)
-          ),
-          theme = theme(
-            plot.title    = element_text(size = 12, face = "bold"),
-            plot.subtitle = element_text(size = 9)
-          )
-        )
+        .vigat_plot_highlight(obj_filt, info_row, gr_row,
+                              group_by = atac_col, tissue = tissue)
 
       }, error = function(e) {
         cat("  Failed:", gene_use, "|", conditionMessage(e), "\n")
@@ -938,13 +900,6 @@ cat(
     })
     names(plots_hl) <- genes_with_window
     plots_hl        <- plots_hl[!vapply(plots_hl, is.null, logical(1))]
-
-    .vigat_save_plots_pdf(
-      plots_list     = plots_hl,
-      outdir         = highlight_dir,
-      file_prefix    = "coverage_vigat_window",
-      genes_per_page = genes_per_page
-    )
   }
 
 
@@ -953,9 +908,8 @@ cat(
   # ----------------------------------------------------------
 
   cat("\n=== Done ===\n")
-  cat("Output:", outdir, "\n")
 
-  invisible(list(
+  out <- list(
     vigat_windows   = vigat_windows,
     vigat_window_df = vigat_window_df,
     count_matrix    = vigat_counts,
@@ -964,5 +918,22 @@ cat(
       genes_found   = genes_found,
       genes_skipped = genes_skipped
     )
-  ))
+  )
+
+  if (return_intermediates) {
+    out$intermediates <- list(
+      tss_info          = marker_tss_df,
+      overlapping_peaks = marker_peaks_df,
+      coverage_plots    = plots,
+      prompt            = prompt,
+      api_response      = result,
+      api_run_info      = api_run_info
+    )
+  }
+
+  if (return_highlighted_plots) {
+    out$highlighted_plots <- plots_hl
+  }
+
+  invisible(out)
 }
