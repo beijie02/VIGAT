@@ -78,15 +78,15 @@ A full walkthrough on an example human islet dataset: [Getting started with VIGA
 
 | Argument | Default | Description |
 |---|---|---|
-| `obj` | | Signac Seurat object with an `ATAC` assay, annotation and fragments |
-| `genes` | | Marker genes to score |
-| `tissue` | | Tissue name passed to the model (improves accuracy) |
-| `species` | `"human"` | Species passed to the model; `NULL` to omit |
+| `obj` | (required) | Signac Seurat object with an `ATAC` assay, gene annotation and fragment files |
+| `genes` | (required) | Marker genes to score |
+| `tissue` | (required) | Tissue name given to the model as context, e.g. `"Islet"` |
+| `species` | `"human"` | Species given to the model; `NULL` omits it |
 | `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
-| `min_atac_cluster_cells` | `50` | Clusters smaller than this are dropped before plotting |
-| `openai_model` | `"gpt-5.5"` | OpenAI model used to read the plots |
+| `min_atac_cluster_cells` | `50` | Clusters with fewer cells are removed before plotting |
+| `openai_model` | `"gpt-5.5"` | OpenAI model that reads the plots |
 | `return_intermediates` | `FALSE` | Also return TSS info, peaks, input coverage plots, prompt and API logs |
-| `return_highlighted_plots` | `FALSE` | Also return coverage plots with the selected window highlighted |
+| `return_highlighted_plots` | `FALSE` | Also return one coverage plot per gene with the selected window highlighted |
 
 ## Troubleshooting
 

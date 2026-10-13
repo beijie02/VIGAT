@@ -168,23 +168,24 @@
 <tbody>
 <tr>
 <td><code>obj</code></td>
-<td></td>
-<td>Signac Seurat object with an <code>ATAC</code> assay, annotation and fragments</td>
+<td>(required)</td>
+<td>Signac Seurat object with an <code>ATAC</code> assay, gene annotation and fragment files</td>
 </tr>
 <tr>
 <td><code>genes</code></td>
-<td></td>
+<td>(required)</td>
 <td>Marker genes to score</td>
 </tr>
 <tr>
 <td><code>tissue</code></td>
-<td></td>
-<td>Tissue name passed to the model (improves accuracy)</td>
+<td>(required)</td>
+<td>Tissue name given to the model as context, e.g. <code>"Islet"</code>
+</td>
 </tr>
 <tr>
 <td><code>species</code></td>
 <td><code>"human"</code></td>
-<td>Species passed to the model; <code>NULL</code> to omit</td>
+<td>Species given to the model; <code>NULL</code> omits it</td>
 </tr>
 <tr>
 <td><code>cluster_col</code></td>
@@ -195,12 +196,12 @@
 <tr>
 <td><code>min_atac_cluster_cells</code></td>
 <td><code>50</code></td>
-<td>Clusters smaller than this are dropped before plotting</td>
+<td>Clusters with fewer cells are removed before plotting</td>
 </tr>
 <tr>
 <td><code>openai_model</code></td>
 <td><code>"gpt-5.5"</code></td>
-<td>OpenAI model used to read the plots</td>
+<td>OpenAI model that reads the plots</td>
 </tr>
 <tr>
 <td><code>return_intermediates</code></td>
@@ -210,7 +211,7 @@
 <tr>
 <td><code>return_highlighted_plots</code></td>
 <td><code>FALSE</code></td>
-<td>Also return coverage plots with the selected window highlighted</td>
+<td>Also return one coverage plot per gene with the selected window highlighted</td>
 </tr>
 </tbody>
 </table>
@@ -268,7 +269,7 @@
 <div class="developers">
 <h2 data-toc-skip>Developers</h2>
 <ul class="list-unstyled">
-<li>Beijie (Paige) Ji <br><small class="roles"> Author, maintainer </small>   </li>
+<li>Beijie(Paige) Ji <br><small class="roles"> Author, maintainer </small>   </li>
 </ul>
 </div>
 
@@ -279,7 +280,7 @@
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Beijie (Paige) Ji.</p>
+  <p>Developed by Beijie(Paige) Ji.</p>
 </div>
 
 <div class="pkgdown-footer-right">

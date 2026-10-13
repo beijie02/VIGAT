@@ -51,10 +51,10 @@ library(Signac)
 
 ## Example data
 
-The example is the human pancreatic islet sample GSM7618328_GSM7618327
-from CompassDB. The object has been quality-controlled and clustered on
-the ATAC data, and only the ATAC clustering used here is kept, in the
-metadata column `ATAC_cluster`.
+The example is the human islet sample GSM7618328_GSM7618327 from
+CompassDB. The object has been quality-controlled and clustered on the
+ATAC data, and the cluster labels are stored in the metadata column
+`ATAC_cluster`.
 
 Three files are needed: the object `islet_example_atac.rds` (about 3.9
 GB), the fragment file `islet_fragments.tsv.gz` (about 3 GB) and its
@@ -412,15 +412,17 @@ res$intermediates$api_run_info       # model, tokens, time
 
 ## Options
 
-| Argument | Default | What it does |
+| Argument | Default | Description |
 |----|----|----|
-| `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
-| `tissue` | (required) | Tissue name given to the model as context |
+| `obj` | (required) | Signac Seurat object with an `ATAC` assay, gene annotation and fragment files |
+| `genes` | (required) | Marker genes to score |
+| `tissue` | (required) | Tissue name given to the model as context, e.g. `"Islet"` |
 | `species` | `"human"` | Species given to the model; `NULL` omits it |
+| `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
 | `min_atac_cluster_cells` | `50` | Clusters with fewer cells are removed before plotting |
 | `openai_model` | `"gpt-5.5"` | OpenAI model that reads the plots |
-| `return_intermediates` | `FALSE` | Also return TSS info, peaks, input plots, prompt and API logs |
-| `return_highlighted_plots` | `FALSE` | Also return one highlighted coverage plot per gene |
+| `return_intermediates` | `FALSE` | Also return TSS info, peaks, input coverage plots, prompt and API logs |
+| `return_highlighted_plots` | `FALSE` | Also return one coverage plot per gene with the selected window highlighted |
 
 ## Session info
 

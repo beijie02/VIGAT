@@ -110,10 +110,9 @@ GitHub.</p>
 <div class="section level2">
 <h2 id="example-data">Example data<a class="anchor" aria-label="anchor" href="#example-data"></a>
 </h2>
-<p>The example is the human pancreatic islet sample
-GSM7618328_GSM7618327 from CompassDB. The object has been
-quality-controlled and clustered on the ATAC data, and only the ATAC
-clustering used here is kept, in the metadata column
+<p>The example is the human islet sample GSM7618328_GSM7618327 from
+CompassDB. The object has been quality-controlled and clustered on the
+ATAC data, and the cluster labels are stored in the metadata column
 <code>ATAC_cluster</code>.</p>
 <p>Three files are needed: the object
 <code>islet_example_atac.rds</code> (about 3.9 GB), the fragment file
@@ -932,25 +931,38 @@ VIGAT built for the model:</p>
 <thead><tr class="header">
 <th>Argument</th>
 <th>Default</th>
-<th>What it does</th>
+<th>Description</th>
 </tr></thead>
 <tbody>
+<tr class="odd">
+<td><code>obj</code></td>
+<td>(required)</td>
+<td>Signac Seurat object with an <code>ATAC</code> assay, gene
+annotation and fragment files</td>
+</tr>
+<tr class="even">
+<td><code>genes</code></td>
+<td>(required)</td>
+<td>Marker genes to score</td>
+</tr>
+<tr class="odd">
+<td><code>tissue</code></td>
+<td>(required)</td>
+<td>Tissue name given to the model as context,
+e.g. <code>"Islet"</code>
+</td>
+</tr>
+<tr class="even">
+<td><code>species</code></td>
+<td><code>"human"</code></td>
+<td>Species given to the model; <code>NULL</code> omits it</td>
+</tr>
 <tr class="odd">
 <td><code>cluster_col</code></td>
 <td><code>NULL</code></td>
 <td>Metadata column with ATAC clusters; <code>NULL</code> uses
 <code>Idents(obj)</code>
 </td>
-</tr>
-<tr class="even">
-<td><code>tissue</code></td>
-<td>(required)</td>
-<td>Tissue name given to the model as context</td>
-</tr>
-<tr class="odd">
-<td><code>species</code></td>
-<td><code>"human"</code></td>
-<td>Species given to the model; <code>NULL</code> omits it</td>
 </tr>
 <tr class="even">
 <td><code>min_atac_cluster_cells</code></td>
@@ -965,12 +977,14 @@ VIGAT built for the model:</p>
 <tr class="even">
 <td><code>return_intermediates</code></td>
 <td><code>FALSE</code></td>
-<td>Also return TSS info, peaks, input plots, prompt and API logs</td>
+<td>Also return TSS info, peaks, input coverage plots, prompt and API
+logs</td>
 </tr>
 <tr class="odd">
 <td><code>return_highlighted_plots</code></td>
 <td><code>FALSE</code></td>
-<td>Also return one highlighted coverage plot per gene</td>
+<td>Also return one coverage plot per gene with the selected window
+highlighted</td>
 </tr>
 </tbody>
 </table>
@@ -1013,7 +1027,7 @@ VIGAT built for the model:</p>
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Beijie (Paige) Ji.</p>
+  <p>Developed by Beijie(Paige) Ji.</p>
 </div>
 
 <div class="pkgdown-footer-right">

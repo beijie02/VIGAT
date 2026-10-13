@@ -447,15 +447,17 @@ res$intermediates$api_run_info       # model, tokens, time
 
 ## Options
 
-| Argument | Default | What it does |
+| Argument | Default | Description |
 |---|---|---|
-| `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
-| `tissue` | (required) | Tissue name given to the model as context |
+| `obj` | (required) | Signac Seurat object with an `ATAC` assay, gene annotation and fragment files |
+| `genes` | (required) | Marker genes to score |
+| `tissue` | (required) | Tissue name given to the model as context, e.g. `"Islet"` |
 | `species` | `"human"` | Species given to the model; `NULL` omits it |
+| `cluster_col` | `NULL` | Metadata column with ATAC clusters; `NULL` uses `Idents(obj)` |
 | `min_atac_cluster_cells` | `50` | Clusters with fewer cells are removed before plotting |
 | `openai_model` | `"gpt-5.5"` | OpenAI model that reads the plots |
-| `return_intermediates` | `FALSE` | Also return TSS info, peaks, input plots, prompt and API logs |
-| `return_highlighted_plots` | `FALSE` | Also return one highlighted coverage plot per gene |
+| `return_intermediates` | `FALSE` | Also return TSS info, peaks, input coverage plots, prompt and API logs |
+| `return_highlighted_plots` | `FALSE` | Also return one coverage plot per gene with the selected window highlighted |
 
 ## Session info
 
