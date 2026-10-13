@@ -109,7 +109,7 @@
 
 # Coverage plot sent to the model (TSS +/- 5 kb, grouped by ATAC cluster).
 # info_row needs: region, tss, chr, strand. title = FALSE drops title/subtitle.
-.vigat_plot_coverage <- function(obj, info_row, group_by, tissue, title = TRUE) {
+.vigat_plot_coverage <- function(obj, info_row, group_by, tissue, title = FALSE) {
   p <- CoveragePlot(
     object     = obj,
     region     = info_row$region[1],
@@ -137,7 +137,7 @@
 # Same coverage plot with the selected window highlighted in blue.
 # window_row needs: chr, start, end. title = FALSE drops title/subtitle.
 .vigat_plot_highlight <- function(obj, info_row, window_row, group_by, tissue,
-                                  title = TRUE) {
+                                  title = FALSE) {
   p <- CoveragePlot(
     object     = obj,
     region     = info_row$region[1],
@@ -675,7 +675,7 @@ genes_found <- marker_tss_df$gene
   }
 
   p <- tryCatch(
-    .vigat_plot_coverage(obj_filt, info_row, group_by = atac_col, tissue = tissue),
+    .vigat_plot_coverage(obj_filt, info_row, group_by = atac_col, tissue = tissue, title = FALSE),
     error = function(e) {
       warning(
         "Skipping ", gene_use,
