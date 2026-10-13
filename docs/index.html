@@ -58,7 +58,7 @@
 </h1>
 </div>
 <p><strong>VIGAT: VLM-guided gene activity quantification from single-cell ATAC-seq</strong></p>
-<p>VIGAT uses a vision-language model (VLM) to read TSS-centered single-cell ATAC coverage plots and select, for each marker gene, one compact genomic window that best captures its cluster-specific chromatin accessibility. VIGAT then counts fragments in those windows to quantify gene activity, returning a gene-by-cell ATAC count matrix.</p>
+<p>VIGAT uses a vision-language model (VLM) to read TSS-centered single-cell ATAC coverage plots and select, for each marker gene, one compact genomic window that best captures its cluster-specific chromatin accessibility. The selected regions are then used to quantify ATAC fragments and construct a gene-by-cell activity matrix. VIGAT relies only on unsupervised ATAC clusters and does not require explicit cell type annotations.</p>
 <p align="center">
 <img src="reference/figures/vigat_example.png" width="600"><br><em>The window VIGAT selects (blue) on a TSS-centered ATAC coverage plot of a human islet sample.</em>
 </p>
@@ -76,8 +76,14 @@
 <div class="section level2">
 <h2 id="quick-start">Quick start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
 </h2>
+<p>VIGAT sends coverage plots to the OpenAI API, so you need your own OpenAI API key (<a href="https://platform.openai.com/api-keys" class="external-link">create one here</a>; API usage is billed to your OpenAI account).</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/beijie02/VIGAT" class="external-link">VIGAT</a></span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># IMPORTANT! Assign your OpenAI API key. See the vignette for details</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your_openai_API_key"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/beijie02/VIGAT" class="external-link">VIGAT</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/stuart-lab/signac" class="external-link">Signac</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://satijalab.org/seurat" class="external-link">Seurat</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># obj: a processed Signac Seurat object with an "ATAC" assay,</span></span>
 <span><span class="co">#      gene annotation and fragment files.</span></span>
@@ -92,8 +98,13 @@
 <span><span class="va">res</span><span class="op">$</span><span class="va">count_matrix</span>         <span class="co"># gene x cell ATAC counts in those windows</span></span>
 <span></span>
 <span><span class="co"># Add the counts as a new assay for downstream analysis</span></span>
-<span><span class="va">obj</span><span class="op">[[</span><span class="st">"VIGAT"</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu">CreateAssayObject</span><span class="op">(</span>counts <span class="op">=</span> <span class="va">res</span><span class="op">$</span><span class="va">count_matrix</span><span class="op">)</span></span></code></pre></div>
-<p>VIGAT reads your OpenAI key from the <code>OPENAI_API_KEY</code> environment variable. Add <code>OPENAI_API_KEY=your_key</code> to <code>~/.Renviron</code> once, and never put the key in scripts or commit it to GitHub.</p>
+<span><span class="va">obj</span><span class="op">[[</span><span class="st">"VIGAT"</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/CreateAssayObject.html" class="external-link">CreateAssayObject</a></span><span class="op">(</span>counts <span class="op">=</span> <span class="va">res</span><span class="op">$</span><span class="va">count_matrix</span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv()</a></code> sets the key for the current R session. To set it permanently, add <code>OPENAI_API_KEY=your_openai_API_key</code> to <code>~/.Renviron</code> (<code><a href="https://usethis.r-lib.org/reference/edit.html" class="external-link">usethis::edit_r_environ()</a></code> opens it) and restart R.</p>
+<div class="section level3">
+<h3 id="warning-warning-avoid-sharing-your-api-key-with-others-or-uploading-it-to-public-spaces">⚠️ Warning: avoid sharing your API key with others or uploading it to public spaces.<a class="anchor" aria-label="anchor" href="#warning-warning-avoid-sharing-your-api-key-with-others-or-uploading-it-to-public-spaces"></a>
+</h3>
+<p>Do not write the key into scripts you share, and do not commit <code>.Renviron</code> to GitHub.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="output">Output<a class="anchor" aria-label="anchor" href="#output"></a>
@@ -150,6 +161,7 @@
 <h2 id="vignette">Vignette<a class="anchor" aria-label="anchor" href="#vignette"></a>
 </h2>
 <p>A full walkthrough on an example human islet dataset: <a href="https://beijie02.github.io/VIGAT/articles/VIGAT.html">Getting started with VIGAT</a></p>
+<p>The example data (Signac object, fragment file and index) are available on Zenodo: <a href="https://doi.org/10.5281/zenodo.23347228" class="external-link">doi:10.5281/zenodo.23347228</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="main-arguments">Main arguments<a class="anchor" aria-label="anchor" href="#main-arguments"></a>
@@ -238,8 +250,13 @@
 <div class="section level2">
 <h2 id="contact">Contact<a class="anchor" aria-label="anchor" href="#contact"></a>
 </h2>
-<!-- TODO: authors and maintainer. -->
-<p>Please report bugs through <a href="https://github.com/beijie02/VIGAT/issues" class="external-link">GitHub issues</a>.</p>
+<ul>
+<li>Beijie Ji (maintainer): <a href="mailto:beijie.ji@duke.edu" class="email">beijie.ji@duke.edu</a>
+</li>
+<li>Zhicheng Ji: <a href="mailto:zhicheng.ji@duke.edu" class="email">zhicheng.ji@duke.edu</a>
+</li>
+</ul>
+<p>Please report bugs and feature requests through <a href="https://github.com/beijie02/VIGAT/issues" class="external-link">GitHub issues</a>.</p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">

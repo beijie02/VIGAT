@@ -81,8 +81,9 @@ per ATAC cluster, the gene model and the called peaks;</li>
 <li>sends the plots to a vision-language model (VLM) with instructions
 to pick one compact window that captures the clearest cluster-specific
 promoter signal;</li>
-<li>counts fragments in the selected windows to build a gene-by-cell
-matrix.</li>
+<li>uses the selected windows to quantify ATAC fragments and construct a
+gene-by-cell activity matrix, without requiring explicit cell type
+annotations.</li>
 </ol>
 <p>All of this happens in a single call to <code><a href="../reference/VIGAT.html">VIGAT()</a></code>.</p>
 <p>This vignette runs VIGAT on a human pancreatic islet sample with 15
@@ -97,12 +98,42 @@ marker genes for 7 cell types.</p>
 <span><span class="fu">BiocManager</span><span class="fu">::</span><span class="fu"><a href="https://bioconductor.github.io/BiocManager/reference/install.html" class="external-link">install</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"GenomicRanges"</span>, <span class="st">"GenomeInfoDb"</span>, <span class="st">"IRanges"</span>,</span>
 <span>                       <span class="st">"S4Vectors"</span>, <span class="st">"BiocGenerics"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu">remotes</span><span class="fu">::</span><span class="fu"><a href="https://remotes.r-lib.org/reference/install_github.html" class="external-link">install_github</a></span><span class="op">(</span><span class="st">"beijie02/VIGAT"</span><span class="op">)</span></span></code></pre></div>
-<p>VIGAT reads your OpenAI API key from the <code>OPENAI_API_KEY</code>
-environment variable. Add it once to <code>~/.Renviron</code>:</p>
-<pre><code><span><span class="va">OPENAI_API_KEY</span><span class="op">=</span><span class="va">your_openai_api_key</span></span></code></pre>
-<p>then restart R. Do not put the key in scripts or commit it to
-GitHub.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+</div>
+<div class="section level2">
+<h2 id="set-up-your-openai-api-key">Set up your OpenAI API key<a class="anchor" aria-label="anchor" href="#set-up-your-openai-api-key"></a>
+</h2>
+<p>VIGAT sends the coverage plots to the OpenAI API, so you need your
+own OpenAI API key.</p>
+<ol style="list-style-type: decimal">
+<li>Sign in at <a href="https://platform.openai.com" class="external-link uri">https://platform.openai.com</a>, open the <a href="https://platform.openai.com/api-keys" class="external-link">API keys page</a> and create
+a new secret key. API usage is billed to your OpenAI account, so add a
+payment method or credits under <em>Billing</em> before running
+VIGAT.</li>
+<li>Assign the key in R before calling <code><a href="../reference/VIGAT.html">VIGAT()</a></code>:</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># IMPORTANT! Assign your OpenAI API key</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your_openai_API_key"</span><span class="op">)</span></span></code></pre></div>
+<p>This sets the key for the current R session only. To set it
+permanently, add the following line to the file <code>~/.Renviron</code>
+(create the file if it does not exist;
+<code><a href="https://usethis.r-lib.org/reference/edit.html" class="external-link">usethis::edit_r_environ()</a></code> opens it for you) and restart
+R:</p>
+<pre><code><span><span class="va">OPENAI_API_KEY</span><span class="op">=</span><span class="va">your_openai_API_key</span></span></code></pre>
+<p>You can check that R sees the key with
+<code>nchar(Sys.getenv("OPENAI_API_KEY")) &gt; 0</code>. If the key is
+missing, <code><a href="../reference/VIGAT.html">VIGAT()</a></code> stops with an error explaining how to set
+it.</p>
+<blockquote>
+<p>⚠️ <strong>Warning:</strong> avoid sharing your API key with others
+or uploading it to public spaces. Do not write the key into scripts you
+share, and do not commit <code>.Renviron</code> to GitHub.</p>
+</blockquote>
+</div>
+<div class="section level2">
+<h2 id="load-packages">Load packages<a class="anchor" aria-label="anchor" href="#load-packages"></a>
+</h2>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/beijie02/VIGAT" class="external-link">VIGAT</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://satijalab.org/seurat" class="external-link">Seurat</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/stuart-lab/signac" class="external-link">Signac</a></span><span class="op">)</span></span></code></pre></div>
@@ -116,22 +147,23 @@ ATAC data, and the cluster labels are stored in the metadata column
 <code>ATAC_cluster</code>.</p>
 <p>Three files are needed: the object
 <code>islet_example_atac.rds</code> (about 3.9 GB), the fragment file
-<code>islet_fragments.tsv.gz</code> (about 3 GB) and its index
-<code>islet_fragments.tsv.gz.tbi</code>. Download them into the same
-folder:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code>islet_fragments.tsv.gz</code> (about 3.1 GB) and its index
+<code>islet_fragments.tsv.gz.tbi</code>. They are deposited on Zenodo
+(<a href="https://doi.org/10.5281/zenodo.23347228" class="external-link">doi:10.5281/zenodo.23347228</a>).
+Download them into the same folder:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>timeout <span class="op">=</span> <span class="fl">3600</span><span class="op">)</span>   <span class="co"># large files: allow up to an hour per download</span></span>
-<span><span class="va">base</span> <span class="op">&lt;-</span> <span class="st">"https://duke.box.com/shared/static"</span></span>
+<span><span class="va">base</span>  <span class="op">&lt;-</span> <span class="st">"https://zenodo.org/records/23347228/files"</span></span>
+<span><span class="va">files</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"islet_example_atac.rds"</span>,</span>
+<span>           <span class="st">"islet_fragments.tsv.gz"</span>,</span>
+<span>           <span class="st">"islet_fragments.tsv.gz.tbi"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/download.file.html" class="external-link">download.file</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">base</span>, <span class="st">"g31hskzlm8865ojydlyjtkurwz3ao4gc.rds"</span><span class="op">)</span>,</span>
-<span>              <span class="st">"islet_example_atac.rds"</span>, mode <span class="op">=</span> <span class="st">"wb"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/download.file.html" class="external-link">download.file</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">base</span>, <span class="st">"637jcsxkkw4dxn8oka7k6kig6uo5d905.gz"</span><span class="op">)</span>,</span>
-<span>              <span class="st">"islet_fragments.tsv.gz"</span>, mode <span class="op">=</span> <span class="st">"wb"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/download.file.html" class="external-link">download.file</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">base</span>, <span class="st">"7mzirxtynqummqoflwpquq2n9r28cda7.tbi"</span><span class="op">)</span>,</span>
-<span>              <span class="st">"islet_fragments.tsv.gz.tbi"</span>, mode <span class="op">=</span> <span class="st">"wb"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">f</span> <span class="kw">in</span> <span class="va">files</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/utils/download.file.html" class="external-link">download.file</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">base</span>, <span class="st">"/"</span>, <span class="va">f</span>, <span class="st">"?download=1"</span><span class="op">)</span>, <span class="va">f</span>, mode <span class="op">=</span> <span class="st">"wb"</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
 <p>A Signac object stores the location of its fragment file, so point
 the object to the downloaded file:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">obj</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"islet_example_atac.rds"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">frags</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://stuartlab.org/signac/reference/Fragments.html" class="external-link">Fragments</a></span><span class="op">(</span><span class="va">obj</span><span class="op">)</span></span>
@@ -235,7 +267,7 @@ genes, taken from the cell type markers in <a href="https://www.immunesinglecell
 </tr>
 </tbody>
 </table>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">marker_genes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"CPA1"</span>, <span class="st">"CTRB1"</span>, <span class="st">"PRSS1"</span>,      <span class="co"># acinar</span></span>
 <span>                  <span class="st">"GCG"</span>, <span class="st">"TTR"</span>,                 <span class="co"># alpha</span></span>
 <span>                  <span class="st">"IAPP"</span>, <span class="st">"INS"</span>,                <span class="co"># beta</span></span>
@@ -248,7 +280,7 @@ genes, taken from the cell type markers in <a href="https://www.immunesinglecell
 <h2 id="run-vigat">Run VIGAT<a class="anchor" aria-label="anchor" href="#run-vigat"></a>
 </h2>
 <p>One call does the whole analysis:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/VIGAT.html">VIGAT</a></span><span class="op">(</span></span>
 <span>  obj         <span class="op">=</span> <span class="va">obj</span>,</span>
 <span>  genes       <span class="op">=</span> <span class="va">marker_genes</span>,</span>
@@ -269,13 +301,16 @@ of the ATAC assay, and the called peaks within ±5 kb are collected.</li>
 the model as PDFs, together with a prompt that lists each gene, its
 strand and the overlapping peaks. The PDFs are written to a temporary
 folder and deleted when <code><a href="../reference/VIGAT.html">VIGAT()</a></code> returns.</li>
-<li>The model returns one window per gene. VIGAT parses the windows and
-counts fragments in them with <code><a href="https://stuartlab.org/signac/reference/FeatureMatrix.html" class="external-link">Signac::FeatureMatrix()</a></code>.</li>
+<li>The model returns one window per gene. The selected regions are then
+used to quantify ATAC fragments and construct a gene-by-cell activity
+matrix, without requiring explicit cell type annotations. The counting
+uses <code><a href="https://stuartlab.org/signac/reference/FeatureMatrix.html" class="external-link">Signac::FeatureMatrix()</a></code> (see <a href="#gene-activity-matrix">Gene activity matrix</a> below).</li>
 </ul>
 <p><code><a href="../reference/VIGAT.html">VIGAT()</a></code> writes nothing to disk; everything comes back in
 <code>res</code>. The main outputs are <code>res$vigat_windows</code>,
 the selected window for each gene, and <code>res$count_matrix</code>,
-the gene-by-cell matrix of fragment counts in those windows.</p>
+the gene-by-cell activity matrix of fragment counts in those
+windows.</p>
 <p>In this run the model (gpt-5.5) used 38,082 tokens and took about 2.1
 minutes for 15 genes, sent as 4 PDF pages.</p>
 </div>
@@ -892,7 +927,7 @@ window in blue</p>
 </h2>
 <p>Because <code><a href="../reference/VIGAT.html">VIGAT()</a></code> does not write files, save what you need
 yourself:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">res</span>, <span class="st">"vigat_islet_result.rds"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/write.table.html" class="external-link">write.csv</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">vigat_window_df</span>, <span class="st">"vigat_windows.csv"</span>, row.names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -909,7 +944,7 @@ report.</p>
 </h2>
 <p>Set <code>return_intermediates = TRUE</code> to also get the inputs
 VIGAT built for the model:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/VIGAT.html">VIGAT</a></span><span class="op">(</span><span class="va">obj</span>, genes <span class="op">=</span> <span class="va">marker_genes</span>, tissue <span class="op">=</span> <span class="st">"Islet"</span>,</span>
 <span>             cluster_col <span class="op">=</span> <span class="st">"ATAC_cluster"</span>, return_intermediates <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
@@ -992,7 +1027,7 @@ highlighted</td>
 <div class="section level2">
 <h2 id="session-info">Session info<a class="anchor" aria-label="anchor" href="#session-info"></a>
 </h2>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/sessionInfo.html" class="external-link">sessionInfo</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">#&gt; R version 4.5.1 (2025-06-13)</span></span>
 <span><span class="co">#&gt; Platform: aarch64-apple-darwin20</span></span>

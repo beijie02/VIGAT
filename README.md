@@ -2,7 +2,7 @@
 
 **VIGAT: VLM-guided gene activity quantification from single-cell ATAC-seq**
 
-VIGAT uses a vision-language model (VLM) to read TSS-centered single-cell ATAC coverage plots and select, for each marker gene, one compact genomic window that best captures its cluster-specific chromatin accessibility. VIGAT then counts fragments in those windows to quantify gene activity, returning a gene-by-cell ATAC count matrix.
+VIGAT uses a vision-language model (VLM) to read TSS-centered single-cell ATAC coverage plots and select, for each marker gene, one compact genomic window that best captures its cluster-specific chromatin accessibility. The selected regions are then used to quantify ATAC fragments and construct a gene-by-cell activity matrix. VIGAT relies only on unsupervised ATAC clusters and does not require explicit cell type annotations.
 
 <p align="center">
   <img src="man/figures/vigat_example.png" width="600">
@@ -24,8 +24,15 @@ remotes::install_github("beijie02/VIGAT")
 
 ## Quick start
 
+VIGAT sends coverage plots to the OpenAI API, so you need your own OpenAI API key ([create one here](https://platform.openai.com/api-keys); API usage is billed to your OpenAI account).
+
 ```r
+# IMPORTANT! Assign your OpenAI API key. See the vignette for details
+Sys.setenv(OPENAI_API_KEY = "your_openai_API_key")
+
 library(VIGAT)
+library(Signac)
+library(Seurat)
 
 # obj: a processed Signac Seurat object with an "ATAC" assay,
 #      gene annotation and fragment files.
@@ -43,7 +50,11 @@ res$count_matrix         # gene x cell ATAC counts in those windows
 obj[["VIGAT"]] <- CreateAssayObject(counts = res$count_matrix)
 ```
 
-VIGAT reads your OpenAI key from the `OPENAI_API_KEY` environment variable. Add `OPENAI_API_KEY=your_key` to `~/.Renviron` once, and never put the key in scripts or commit it to GitHub.
+`Sys.setenv()` sets the key for the current R session. To set it permanently, add `OPENAI_API_KEY=your_openai_API_key` to `~/.Renviron` (`usethis::edit_r_environ()` opens it) and restart R.
+
+### ⚠️ Warning: avoid sharing your API key with others or uploading it to public spaces.
+
+Do not write the key into scripts you share, and do not commit `.Renviron` to GitHub.
 
 ## Output
 
@@ -74,6 +85,8 @@ for (g in names(res$highlighted_plots)) {
 
 A full walkthrough on an example human islet dataset: [Getting started with VIGAT](https://beijie02.github.io/VIGAT/articles/VIGAT.html)
 
+The example data (Signac object, fragment file and index) are available on Zenodo: [doi:10.5281/zenodo.23347228](https://doi.org/10.5281/zenodo.23347228).
+
 ## Main arguments
 
 | Argument | Default | Description |
@@ -101,5 +114,7 @@ A full walkthrough on an example human islet dataset: [Getting started with VIGA
 
 ## Contact
 
-<!-- TODO: authors and maintainer. -->
-Please report bugs through [GitHub issues](https://github.com/beijie02/VIGAT/issues).
+- Beijie Ji (maintainer): <beijie.ji@duke.edu>
+- Zhicheng Ji: <zhicheng.ji@duke.edu>
+
+Please report bugs and feature requests through [GitHub issues](https://github.com/beijie02/VIGAT/issues).

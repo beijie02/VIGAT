@@ -17,8 +17,9 @@ gene by gene, the way an analyst would by eye. For each marker gene it
 2.  sends the plots to a vision-language model (VLM) with instructions
     to pick one compact window that captures the clearest
     cluster-specific promoter signal;
-3.  counts fragments in the selected windows to build a gene-by-cell
-    matrix.
+3.  uses the selected windows to quantify ATAC fragments and construct a
+    gene-by-cell activity matrix, without requiring explicit cell type
+    annotations.
 
 All of this happens in a single call to
 [`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md).
@@ -36,12 +37,41 @@ BiocManager::install(c("GenomicRanges", "GenomeInfoDb", "IRanges",
 remotes::install_github("beijie02/VIGAT")
 ```
 
-VIGAT reads your OpenAI API key from the `OPENAI_API_KEY` environment
-variable. Add it once to `~/.Renviron`:
+## Set up your OpenAI API key
 
-    OPENAI_API_KEY=your_openai_api_key
+VIGAT sends the coverage plots to the OpenAI API, so you need your own
+OpenAI API key.
 
-then restart R. Do not put the key in scripts or commit it to GitHub.
+1.  Sign in at <https://platform.openai.com>, open the [API keys
+    page](https://platform.openai.com/api-keys) and create a new secret
+    key. API usage is billed to your OpenAI account, so add a payment
+    method or credits under *Billing* before running VIGAT.
+2.  Assign the key in R before calling
+    [`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md):
+
+``` r
+# IMPORTANT! Assign your OpenAI API key
+Sys.setenv(OPENAI_API_KEY = "your_openai_API_key")
+```
+
+This sets the key for the current R session only. To set it permanently,
+add the following line to the file `~/.Renviron` (create the file if it
+does not exist;
+[`usethis::edit_r_environ()`](https://usethis.r-lib.org/reference/edit.html)
+opens it for you) and restart R:
+
+    OPENAI_API_KEY=your_openai_API_key
+
+You can check that R sees the key with
+`nchar(Sys.getenv("OPENAI_API_KEY")) > 0`. If the key is missing,
+[`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md) stops
+with an error explaining how to set it.
+
+> ⚠️ **Warning:** avoid sharing your API key with others or uploading it
+> to public spaces. Do not write the key into scripts you share, and do
+> not commit `.Renviron` to GitHub.
+
+## Load packages
 
 ``` r
 library(VIGAT)
@@ -57,19 +87,21 @@ ATAC data, and the cluster labels are stored in the metadata column
 `ATAC_cluster`.
 
 Three files are needed: the object `islet_example_atac.rds` (about 3.9
-GB), the fragment file `islet_fragments.tsv.gz` (about 3 GB) and its
-index `islet_fragments.tsv.gz.tbi`. Download them into the same folder:
+GB), the fragment file `islet_fragments.tsv.gz` (about 3.1 GB) and its
+index `islet_fragments.tsv.gz.tbi`. They are deposited on Zenodo
+([doi:10.5281/zenodo.23347228](https://doi.org/10.5281/zenodo.23347228)).
+Download them into the same folder:
 
 ``` r
 options(timeout = 3600)   # large files: allow up to an hour per download
-base <- "https://duke.box.com/shared/static"
+base  <- "https://zenodo.org/records/23347228/files"
+files <- c("islet_example_atac.rds",
+           "islet_fragments.tsv.gz",
+           "islet_fragments.tsv.gz.tbi")
 
-download.file(file.path(base, "g31hskzlm8865ojydlyjtkurwz3ao4gc.rds"),
-              "islet_example_atac.rds", mode = "wb")
-download.file(file.path(base, "637jcsxkkw4dxn8oka7k6kig6uo5d905.gz"),
-              "islet_fragments.tsv.gz", mode = "wb")
-download.file(file.path(base, "7mzirxtynqummqoflwpquq2n9r28cda7.tbi"),
-              "islet_fragments.tsv.gz.tbi", mode = "wb")
+for (f in files) {
+  download.file(paste0(base, "/", f, "?download=1"), f, mode = "wb")
+}
 ```
 
 A Signac object stores the location of its fragment file, so point the
@@ -156,15 +188,18 @@ Inside [`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md):
   folder and deleted when
   [`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md)
   returns.
-- The model returns one window per gene. VIGAT parses the windows and
-  counts fragments in them with
-  [`Signac::FeatureMatrix()`](https://stuartlab.org/signac/reference/FeatureMatrix.html).
+- The model returns one window per gene. The selected regions are then
+  used to quantify ATAC fragments and construct a gene-by-cell activity
+  matrix, without requiring explicit cell type annotations. The counting
+  uses
+  [`Signac::FeatureMatrix()`](https://stuartlab.org/signac/reference/FeatureMatrix.html)
+  (see [Gene activity matrix](#gene-activity-matrix) below).
 
 [`VIGAT()`](https://beijie02.github.io/VIGAT/reference/VIGAT.md) writes
 nothing to disk; everything comes back in `res`. The main outputs are
 `res$vigat_windows`, the selected window for each gene, and
-`res$count_matrix`, the gene-by-cell matrix of fragment counts in those
-windows.
+`res$count_matrix`, the gene-by-cell activity matrix of fragment counts
+in those windows.
 
 In this run the model (gpt-5.5) used 38,082 tokens and took about 2.1
 minutes for 15 genes, sent as 4 PDF pages.
