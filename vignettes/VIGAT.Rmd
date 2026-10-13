@@ -1,0 +1,95 @@
+---
+title: "Selecting marker-gene ATAC windows with VIGAT"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+vignette: >
+  %\VignetteIndexEntry{VIGAT}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+# VIGAT calls the OpenAI API and needs fragment files,
+# so code chunks are shown but not run when the vignette is built.
+# Results below are loaded from a precomputed run.
+knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
+```
+
+## Overview
+
+<!-- TODO: 2–3 sentences on what VIGAT does and why a window is better than the whole gene body / promoter. -->
+
+## Setup
+
+```{r}
+library(VIGAT)
+library(Seurat)
+library(Signac)
+
+Sys.setenv(OPENAI_API_KEY = "your_openai_API_key")
+```
+
+## Example data
+
+<!-- TODO: describe the islet sample (GSM7618328_GSM7618327) and where to download it. -->
+
+```{r}
+obj <- readRDS("islet_example.rds")
+DefaultAssay(obj) <- "ATAC"
+Idents(obj) <- "ATAC_snn_res.0.8"   # TODO: your ATAC clustering column
+table(Idents(obj))
+```
+
+## Choose marker genes
+
+```{r}
+marker_genes <- c("INS", "GCG", "SST", "PPY", "PRSS1", "KRT19")  # TODO
+```
+
+## Run VIGAT
+
+```{r}
+res <- run_vigat(
+  obj     = obj,
+  genes   = marker_genes,
+  tissue  = "Islet",
+  species = "human",
+  outdir  = "VIGAT_output/islet"
+)
+```
+
+## Selected windows
+
+```{r}
+res$vigat_window_df
+```
+
+<!-- Paste or load the precomputed table here, e.g.
+```{r, eval = TRUE}
+read.csv(system.file("extdata", "islet_vigat_windows.csv", package = "VIGAT"))
+```
+-->
+
+## Inspect the highlighted coverage plots
+
+<!-- Export one page of coverage_vigat_window_page1.pdf as PNG and include it: -->
+```{r, eval = TRUE, echo = FALSE, out.width = "100%"}
+# knitr::include_graphics("figures/islet_INS_vigat_window.png")
+```
+
+## Use the count matrix
+
+```{r}
+obj[["VIGAT"]] <- CreateAssayObject(counts = res$count_matrix)
+DefaultAssay(obj) <- "VIGAT"
+obj <- NormalizeData(obj)
+FeaturePlot(obj, features = marker_genes, reduction = "umap")
+```
+
+## Session info
+
+```{r, eval = TRUE}
+sessionInfo()
+```

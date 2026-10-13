@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Renviron
+.DS_Store
+inst/doc
+docs
+VIGAT_output/
+*.rds
